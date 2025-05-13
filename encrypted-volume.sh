@@ -38,6 +38,7 @@ case "$1" in
     else
       sudo resize2fs "$PARTITION" "$SIZE"
     fi
+    sync
     echo "Filesystem resize completed."
     ;;
 
