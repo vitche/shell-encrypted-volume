@@ -104,7 +104,7 @@ case "$1" in
     fi
 
     echo "Encrypting $NEW_PART with LUKS..."
-    echo YES | sudo cryptsetup luksFormat "$NEW_PART"
+    sudo cryptsetup luksFormat "$NEW_PART"
 
     echo "Opening encrypted partition as $MAPPER_NAME..."
     sudo cryptsetup open "$NEW_PART" "$MAPPER_NAME"
