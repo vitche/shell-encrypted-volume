@@ -38,7 +38,6 @@ case "$1" in
     else
       sudo resize2fs "$PARTITION" "$SIZE"
     fi
-    sync
     echo "Filesystem resize completed."
     ;;
 
@@ -116,6 +115,9 @@ case "$1" in
     ;;
 
   mount)
+    PARTITION="$2"
+    MAPPER_NAME="$3"
+    MOUNT_POINT="$4"
     if [ -z "$PARTITION" ] || [ -z "$MAPPER_NAME" ] || [ -z "$MOUNT_POINT" ]; then
       echo "Usage: $0 mount [partition] [mapper_name] [mount_point]"
       exit 1
@@ -128,6 +130,8 @@ case "$1" in
     ;;
 
   unmount)
+    MAPPER_NAME="$2"
+    MOUNT_POINT="$3"
     if [ -z "$MAPPER_NAME" ] || [ -z "$MOUNT_POINT" ]; then
       echo "Usage: $0 unmount [mapper_name] [mount_point]"
       exit 1
