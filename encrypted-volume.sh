@@ -1,20 +1,44 @@
 #!/bin/bash
 
 PARTITION="$2"
-MAPPER_NAME="$3"
-MOUNT_POINT="$4"
+SIZE="$3"
+MAPPER_NAME="$4"
+MOUNT_POINT="$5"
 
 case "$1" in
 
   install)
     echo "Installing required packages..."
     sudo apt update
-    sudo apt install cryptsetup parted -y
+    sudo apt install cryptsetup parted e2fsprogs -y
     ;;
 
   list)
     echo "Listing available partitions..."
     sudo lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+    ;;
+    
+  list-free)
+    if [ -z "$PARTITION" ]; then
+      echo "Usage: $0 list-free [partition]"
+      exit 1
+    fi  
+    echo "Listing free space..."
+    sudo parted $PARTITION print free
+    ;;
+    
+  resize)
+    if [ -z "$PARTITION" ]; then
+      echo "Usage: $0 resize [partition] [size (optional, e.g., 10G)]"
+      exit 1
+    fi
+    echo "Resizing filesystem for $PARTITION..."
+    if [ -z "$SIZE" ]; then
+      sudo resize2fs "$PARTITION"
+    else
+      sudo resize2fs "$PARTITION" "$SIZE"
+    fi
+    echo "Filesystem resize completed."
     ;;
 
   edit)
@@ -24,6 +48,63 @@ case "$1" in
     fi
     echo "Opening parted for disk editing on $PARTITION..."
     sudo parted "$PARTITION"
+    ;;
+
+  create)
+    if [ -z "$PARTITION" ] || [ -z "$SIZE" ] || [ -z "$MAPPER_NAME" ]; then
+      echo "Usage: $0 create [disk] [size, e.g., 250GB] [mapper_name]"
+      exit 1
+    fi
+
+    echo "Finding free space on $PARTITION for size $SIZE..."
+    FREE_RANGE=$(sudo parted -m "$PARTITION" unit GB print free | awk -F: -v size="$SIZE" '
+      /free/ {
+        start=$2; end=$3;
+        gsub("GB", "", start); gsub("GB", "", end);
+        if ((end - start) >= size+0) {
+          print start " " end;
+          exit;
+        }
+      }')
+
+    if [ -z "$FREE_RANGE" ]; then
+      echo "Error: No suitable free space of at least $SIZE found on $PARTITION."
+      exit 1
+    fi
+
+    START=$(echo "$FREE_RANGE" | cut -d' ' -f1)
+    END=$(echo "$FREE_RANGE" | cut -d' ' -f2)
+
+    echo "Creating a new partition from ${START}GB to ${END}GB on $PARTITION..."
+    sudo parted -s "$PARTITION" mkpart primary ext4 "${START}GB" "${END}GB"
+    sleep 2
+
+    LAST_PART=$(lsblk -ln "$PARTITION" | awk '{print $1}' | tail -n1)
+    NEW_PART="/dev/${LAST_PART}"
+
+    for i in {1..5}; do
+      if [ -b "$NEW_PART" ]; then
+        break
+      fi
+      echo "Waiting for $NEW_PART to appear..."
+      sleep 1
+    done
+
+    if [ ! -b "$NEW_PART" ]; then
+      echo "Error: New partition $NEW_PART was not found."
+      exit 1
+    fi
+
+    echo "Encrypting $NEW_PART with LUKS..."
+    echo YES | sudo cryptsetup luksFormat "$NEW_PART"
+
+    echo "Opening encrypted partition as $MAPPER_NAME..."
+    sudo cryptsetup open "$NEW_PART" "$MAPPER_NAME"
+
+    echo "Formatting /dev/mapper/$MAPPER_NAME as ext4..."
+    sudo mkfs.ext4 "/dev/mapper/$MAPPER_NAME"
+
+    echo "Encrypted partition $NEW_PART created and mapped as /dev/mapper/$MAPPER_NAME"
     ;;
 
   mount)
@@ -50,7 +131,7 @@ case "$1" in
     ;;
 
   *)
-    echo "Usage: $0 {install|list|edit|mount|unmount} [partition] [mapper_name] [mount_point]"
+    echo "Usage: $0 {install|list|list-free|resize|edit|create|mount|unmount} [partition] [mapper_name/size] [mount_point]"
     exit 1
     ;;
 esac
