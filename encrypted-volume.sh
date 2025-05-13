@@ -95,6 +95,13 @@ case "$1" in
       exit 1
     fi
 
+    # Check if LUKS signature already exists
+    if sudo cryptsetup isLuks "$NEW_PART"; then
+      echo "LUKS signature detected on $NEW_PART. Wiping..."
+      sudo dd if=/dev/zero of="$NEW_PART" bs=1M count=16 status=progress
+      sync
+    fi
+
     echo "Encrypting $NEW_PART with LUKS..."
     echo YES | sudo cryptsetup luksFormat "$NEW_PART"
 
