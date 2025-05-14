@@ -38,6 +38,7 @@ case "$1" in
     else
       sudo resize2fs "$PARTITION" "$SIZE"
     fi
+    sync
     echo "Filesystem resize completed."
     ;;
 
@@ -48,6 +49,7 @@ case "$1" in
     fi
     echo "Opening parted for disk editing on $PARTITION..."
     sudo parted "$PARTITION"
+    sync
     ;;
 
   create)
